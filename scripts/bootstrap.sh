@@ -64,41 +64,36 @@ binaryIncrementalDownload() {
 # This will attempt to download the .tar.gz all at once, but will trigger the
 # binaryIncrementalDownload() function upon a failure, allowing for resume
 # if there are network failures.
-binaryDownload() {
+download() {
     local BINARY_FILE=$1
     local URL=$2
     echo "===> Downloading: " "${URL}"
-    # Check if a previous failure occurred and the file was partially downloaded
-    if [ -e "${BINARY_FILE}" ]; then
-        echo "==> Partial binary file found. Resuming download..."
-        binaryIncrementalDownload "${BINARY_FILE}" "${URL}"
+    curl -L --retry 5 --retry-delay 3 "${URL}" | tar xz || rc=$?
+    if [ -n "$rc" ]; then
+        echo "==> There was an error downloading the binary file."
+        return 22
     else
-        curl "${URL}" | tar xz || rc=$?
-        if [ -n "$rc" ]; then
-            echo "==> There was an error downloading the binary file. Switching to incremental download."
-            echo "==> Downloading file..."
-            binaryIncrementalDownload "${BINARY_FILE}" "${URL}"
-        else
-            echo "==> Done."
-        fi
+        echo "==> Done."
     fi
 }
 
-binariesInstall() {
+pullBinaries() {
     echo "===> Downloading version ${FABRIC_TAG} platform specific fabric binaries"
-    binaryDownload "${BINARY_FILE}" "https://nexus.hyperledger.org/content/repositories/releases/org/hyperledger/fabric/hyperledger-fabric/${ARCH}-${VERSION}/${BINARY_FILE}"
+    download "${BINARY_FILE}" "https://github.com/hyperledger/fabric/releases/download/v${VERSION}/${BINARY_FILE}"
     if [ $? -eq 22 ]; then
         echo
         echo "------> ${FABRIC_TAG} platform specific fabric binary is not available to download <----"
         echo
+        exit
     fi
 
     echo "===> Downloading version ${CA_TAG} platform specific fabric-ca-client binary"
-    binaryDownload "${CA_BINARY_FILE}" "https://nexus.hyperledger.org/content/repositories/releases/org/hyperledger/fabric-ca/hyperledger-fabric-ca/${ARCH}-${CA_VERSION}/${CA_BINARY_FILE}"
+    download "${CA_BINARY_FILE}" "https://github.com/hyperledger/fabric-ca/releases/download/v${CA_VERSION}/${CA_BINARY_FILE}"
     if [ $? -eq 22 ]; then
         echo
         echo "------> ${CA_TAG} fabric-ca-client binary is not available to download  (Available from 1.1.0-rc1) <----"
         echo
+        exit
     fi
 }
 
@@ -147,5 +142,5 @@ if [ "$BINARIES" == "true" ]; then
     echo
     echo "Installing Hyperledger Fabric binaries"
     echo
-    binariesInstall
+    pullBinaries
 fi
